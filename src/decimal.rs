@@ -1,16 +1,22 @@
 use std::fmt;
 use std::fmt::Display;
-use std::ops::{Add, Sub};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::str::FromStr;
 use rust_decimal::{Decimal, RoundingStrategy};
-use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::prelude::Zero;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A wrapper around [`rust_decimal::Decimal`] that serializes and deserializes with four decimal places.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Decimal4(Decimal);
 
 const ROUNDING_STRATEGY: RoundingStrategy = RoundingStrategy::MidpointTowardZero;
+
+impl Decimal4 {
+    pub fn zero() -> Self {
+        Decimal4(Decimal::zero())
+    }
+}
 
 impl Display for Decimal4 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -81,6 +87,18 @@ impl Sub for Decimal4 {
 
     fn sub(self, other: Self) -> Self::Output {
         Decimal4::from(self.0 - other.0)
+    }
+}
+
+impl AddAssign for Decimal4 {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl SubAssign for Decimal4 {
+    fn sub_assign(&mut self, other: Self) {
+        self.0 -= other.0;
     }
 }
 
