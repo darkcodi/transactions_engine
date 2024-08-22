@@ -1,6 +1,7 @@
 use thiserror::Error;
 use crate::decimal::Decimal4;
 
+#[derive(Debug, Clone)]
 pub struct Account {
     id: u16,
     available: Decimal4,

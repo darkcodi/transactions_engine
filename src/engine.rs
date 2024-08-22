@@ -34,14 +34,14 @@ impl<TStorage: Storage> Engine<TStorage> {
         self.storage.insert_tx(&db_tx, &tx).await?;
 
         let maybe_account = self.storage.get_account(&db_tx, account_id).await?;
-        if let Some(mut account) = maybe_account {
-            let prev_account_version = account.version();
-            account.deposit(amount)?;
-            self.storage.update_account(&db_tx, &account, prev_account_version).await?;
+        if let Some(old_acc) = maybe_account {
+            let mut new_acc = old_acc.clone();
+            new_acc.deposit(amount)?;
+            self.storage.update_account(&db_tx, &old_acc, &new_acc).await?;
         } else {
-            let mut account = Account::new(account_id);
-            account.deposit(amount)?;
-            self.storage.insert_account(&db_tx, &account).await?;
+            let mut new_acc = Account::new(account_id);
+            new_acc.deposit(amount)?;
+            self.storage.insert_account(&db_tx, &new_acc).await?;
         }
 
         self.storage.insert_operation(&db_tx, &operation).await?;
@@ -65,13 +65,13 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
 
         let maybe_account = self.storage.get_account(&db_tx, account_id).await?;
-        let mut account = maybe_account.ok_or(EngineError::AccountNotFound)?;
-        let prev_account_version = account.version();
-        account.withdraw(amount)?;
+        let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let mut new_acc = old_acc.clone();
+        new_acc.withdraw(amount)?;
 
         let tx = Transaction::new(tx_id, account_id, TransactionType::Withdrawal, amount);
         self.storage.insert_tx(&db_tx, &tx).await?;
-        self.storage.update_account(&db_tx, &account, prev_account_version).await?;
+        self.storage.update_account(&db_tx, &old_acc, &new_acc).await?;
         self.storage.insert_operation(&db_tx, &operation).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
@@ -87,22 +87,22 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
 
         let maybe_tx = self.storage.get_tx(&db_tx, tx_id).await?;
-        let mut tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if tx.account_id() != account_id {
-            return Err(EngineError::TransactionIsBoundToAnotherAccount(tx.account_id()));
+        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        if old_tx.account_id() != account_id {
+            return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&db_tx, account_id).await?;
-        let mut account = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
-        let prev_tx_version = tx.version();
-        tx.set_state(TransactionState::Disputed)?;
+        let mut new_tx = old_tx.clone();
+        new_tx.set_state(TransactionState::Disputed)?;
 
-        let prev_account_version = account.version();
-        account.dispute(tx.amount());
+        let mut new_acc = old_acc.clone();
+        new_acc.dispute(new_tx.amount());
 
-        self.storage.update_tx(&db_tx, &tx, prev_tx_version).await?;
-        self.storage.update_account(&db_tx, &account, prev_account_version).await?;
+        self.storage.update_tx(&db_tx, &old_tx, &new_tx).await?;
+        self.storage.update_account(&db_tx, &old_acc, &new_acc).await?;
         self.storage.insert_operation(&db_tx, &operation).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
@@ -118,22 +118,22 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
 
         let maybe_tx = self.storage.get_tx(&db_tx, tx_id).await?;
-        let mut tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if tx.account_id() != account_id {
-            return Err(EngineError::TransactionIsBoundToAnotherAccount(tx.account_id()));
+        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        if old_tx.account_id() != account_id {
+            return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&db_tx, account_id).await?;
-        let mut account = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
-        let prev_tx_version = tx.version();
-        tx.set_state(TransactionState::Resolved)?;
+        let mut new_tx = old_tx.clone();
+        new_tx.set_state(TransactionState::Resolved)?;
 
-        let prev_account_version = account.version();
-        account.resolve(tx.amount());
+        let mut new_acc = old_acc.clone();
+        new_acc.resolve(new_tx.amount());
 
-        self.storage.update_tx(&db_tx, &tx, prev_tx_version).await?;
-        self.storage.update_account(&db_tx, &account, prev_account_version).await?;
+        self.storage.update_tx(&db_tx, &old_tx, &new_tx).await?;
+        self.storage.update_account(&db_tx, &old_acc, &new_acc).await?;
         self.storage.insert_operation(&db_tx, &operation).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
@@ -149,22 +149,22 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
 
         let maybe_tx = self.storage.get_tx(&db_tx, tx_id).await?;
-        let mut tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if tx.account_id() != account_id {
-            return Err(EngineError::TransactionIsBoundToAnotherAccount(tx.account_id()));
+        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        if old_tx.account_id() != account_id {
+            return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&db_tx, account_id).await?;
-        let mut account = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
-        let prev_tx_version = tx.version();
-        tx.set_state(TransactionState::Chargeback)?;
+        let mut new_tx = old_tx.clone();
+        new_tx.set_state(TransactionState::Chargeback)?;
 
-        let prev_account_version = account.version();
-        account.chargeback(tx.amount());
+        let mut new_acc = old_acc.clone();
+        new_acc.chargeback(new_tx.amount());
 
-        self.storage.update_tx(&db_tx, &tx, prev_tx_version).await?;
-        self.storage.update_account(&db_tx, &account, prev_account_version).await?;
+        self.storage.update_tx(&db_tx, &old_tx, &new_tx).await?;
+        self.storage.update_account(&db_tx, &old_acc, &new_acc).await?;
         self.storage.insert_operation(&db_tx, &operation).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
