@@ -1,13 +1,14 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use crate::decimal::Decimal4;
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum TransactionType {
     Deposit = 0,
     Withdrawal = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum TransactionState {
     Posted = 0,
     Disputed = 1,
@@ -15,7 +16,7 @@ pub enum TransactionState {
     Chargeback = 3,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     id: u32,
     account_id: u16,

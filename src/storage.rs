@@ -1,3 +1,4 @@
+use echodb::Error;
 use thiserror::Error;
 
 use crate::account::Account;
@@ -15,17 +16,17 @@ pub enum Operation {
 pub trait Storage {
     type DbTx;
 
-    async fn get_tx(&self, db_tx: &Self::DbTx, tx_id: u32) -> Result<Option<Transaction>, DbError>;
-    async fn insert_tx(&self, db_tx: &Self::DbTx, tx: &Transaction) -> Result<(), DbError>;
-    async fn update_tx(&self, db_tx: &Self::DbTx, old_tx: &Transaction, new_tx: &Transaction) -> Result<(), DbError>;
+    async fn get_tx(&self, db_tx: &mut Self::DbTx, tx_id: u32) -> Result<Option<Transaction>, DbError>;
+    async fn insert_tx(&self, db_tx: &mut Self::DbTx, tx: &Transaction) -> Result<(), DbError>;
+    async fn update_tx(&self, db_tx: &mut Self::DbTx, old_tx: &Transaction, new_tx: &Transaction) -> Result<(), DbError>;
 
-    async fn get_account(&self, db_tx: &Self::DbTx, acc_id: u16) -> Result<Option<Account>, DbError>;
-    async fn insert_account(&self, db_tx: &Self::DbTx, acc: &Account) -> Result<(), DbError>;
-    async fn update_account(&self, db_tx: &Self::DbTx, old_acc: &Account, new_acc: &Account) -> Result<(), DbError>;
+    async fn get_account(&self, db_tx: &mut Self::DbTx, acc_id: u16) -> Result<Option<Account>, DbError>;
+    async fn insert_account(&self, db_tx: &mut Self::DbTx, acc: &Account) -> Result<(), DbError>;
+    async fn update_account(&self, db_tx: &mut Self::DbTx, old_acc: &Account, new_acc: &Account) -> Result<(), DbError>;
 
     // methods for idempotency
-    async fn is_operation_processed(&self, db_tx: &Self::DbTx, op: &Operation) -> Result<bool, DbError>;
-    async fn insert_operation(&self, db_tx: &Self::DbTx, op: &Operation) -> Result<(), DbError>;
+    async fn is_operation_processed(&self, db_tx: &mut Self::DbTx, op: &Operation) -> Result<bool, DbError>;
+    async fn insert_operation(&self, db_tx: &mut Self::DbTx, op: &Operation) -> Result<(), DbError>;
 
     // methods for consistency
     async fn start_db_tx(&mut self) -> Result<Self::DbTx, DbError>;
