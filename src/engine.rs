@@ -47,6 +47,16 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
     }
 
+    pub async fn execute_operation(&mut self, operation: Operation) -> Result<(), EngineError> {
+        match operation {
+            Operation::Deposit { acc_id, tx_id, amount } => self.deposit(acc_id, tx_id, amount).await,
+            Operation::Withdraw { acc_id, tx_id, amount } => self.withdraw(acc_id, tx_id, amount).await,
+            Operation::Dispute { acc_id, tx_id } => self.dispute(acc_id, tx_id).await,
+            Operation::Resolve { acc_id, tx_id } => self.resolve(acc_id, tx_id).await,
+            Operation::Chargeback { acc_id, tx_id } => self.chargeback(acc_id, tx_id).await,
+        }
+    }
+
     pub async fn deposit(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
