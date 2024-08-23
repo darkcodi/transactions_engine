@@ -1,5 +1,8 @@
-use std::{env, io};
+use std::io;
+
 use anyhow::Context;
+use clap::{Arg, Command};
+
 use crate::csv_parser::{CsvAccount, CsvOperation, CsvParseError};
 use crate::engine::{Engine, Operation};
 use crate::storage::EchoDbStorage;
@@ -13,24 +16,30 @@ mod csv_parser;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() <= 1 {
-        eprintln!("no arguments provided");
-        return Err(anyhow::anyhow!("no arguments provided"));
-    }
-    let file_path = &args[1];
+    let matches = Command::new("Transactions Engine")
+        .version("0.1.0")
+        .about("A simple transactions engine")
+        .arg(
+            Arg::new("filepath")
+                .help("The path to the CSV file to process")
+                .required(true)
+                .index(1),
+        )
+        .get_matches();
+
+    let filepath: &String = matches.get_one("filepath").unwrap();
 
     let mut engine = Engine::new(EchoDbStorage::new());
-    read_csv(file_path, &mut engine).await?;
+    read_csv(filepath, &mut engine).await?;
     write_csv(&mut engine).await?;
 
     Ok(())
 }
 
-async fn read_csv(file_path: &String, engine: &mut Engine<EchoDbStorage>) -> anyhow::Result<u64> {
+async fn read_csv(filepath: &String, engine: &mut Engine<EchoDbStorage>) -> anyhow::Result<u64> {
     let mut csv_reader = csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
-        .from_path(file_path)
+        .from_path(filepath)
         .context("error reading csv file")?;
 
     let mut counter = 0;
