@@ -1,8 +1,40 @@
+use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use crate::account::{Account, AccountUpdateError};
 use crate::decimal::Decimal4;
-use crate::storage::{Operation, DbError, Storage};
+use crate::storage::{DbError, Storage};
 use crate::transaction::{Transaction, TransactionState, TransactionType, TxUpdateError};
+
+pub enum Operation {
+    Deposit { account_id: u16, tx_id: u32, amount: Decimal4 },
+    Withdraw { account_id: u16, tx_id: u32, amount: Decimal4 },
+    Dispute { account_id: u16, tx_id: u32 },
+    Resolve { account_id: u16, tx_id: u32 },
+    Chargeback { account_id: u16, tx_id: u32 },
+}
+
+impl Operation {
+    pub fn get_hash_code(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Hash for Operation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let (op_str, acc_id, tx_id) = match self {
+            Operation::Deposit { account_id, tx_id, amount: _ } => ("deposit", account_id, tx_id),
+            Operation::Withdraw { account_id, tx_id, amount: _ } => ("withdraw", account_id, tx_id),
+            Operation::Dispute { account_id, tx_id } => ("dispute", account_id, tx_id),
+            Operation::Resolve { account_id, tx_id } => ("resolve", account_id, tx_id),
+            Operation::Chargeback { account_id, tx_id } => ("chargeback", account_id, tx_id),
+        };
+        op_str.hash(state);
+        acc_id.hash(state);
+        tx_id.hash(state);
+    }
+}
 
 pub struct Engine<TStorage: Storage> {
     storage: Box<TStorage>,
@@ -19,7 +51,8 @@ impl<TStorage: Storage> Engine<TStorage> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Deposit { account_id, tx_id, amount };
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, &operation).await?;
+        let op_hash = operation.get_hash_code();
+        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
             return Ok(()); // idempotency
         }
@@ -44,7 +77,7 @@ impl<TStorage: Storage> Engine<TStorage> {
             self.storage.insert_account(&mut db_tx, &new_acc).await?;
         }
 
-        self.storage.insert_operation(&mut db_tx, &operation).await?;
+        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
@@ -53,7 +86,8 @@ impl<TStorage: Storage> Engine<TStorage> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Withdraw { account_id, tx_id, amount };
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, &operation).await?;
+        let op_hash = operation.get_hash_code();
+        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
             return Ok(()); // idempotency
         }
@@ -72,7 +106,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         let tx = Transaction::new(tx_id, account_id, TransactionType::Withdrawal, amount);
         self.storage.insert_tx(&mut db_tx, &tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, &operation).await?;
+        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
@@ -81,19 +115,20 @@ impl<TStorage: Storage> Engine<TStorage> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Dispute { account_id, tx_id };
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, &operation).await?;
+        let op_hash = operation.get_hash_code();
+        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
             return Ok(()); // idempotency
         }
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
-        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
         if old_tx.account_id() != account_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
-        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
         new_tx.set_state(TransactionState::Disputed)?;
@@ -103,7 +138,7 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, &operation).await?;
+        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
@@ -112,19 +147,20 @@ impl<TStorage: Storage> Engine<TStorage> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Resolve { account_id, tx_id };
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, &operation).await?;
+        let op_hash = operation.get_hash_code();
+        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
             return Ok(()); // idempotency
         }
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
-        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
         if old_tx.account_id() != account_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
-        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
         new_tx.set_state(TransactionState::Resolved)?;
@@ -134,7 +170,7 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, &operation).await?;
+        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
@@ -143,19 +179,20 @@ impl<TStorage: Storage> Engine<TStorage> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Chargeback { account_id, tx_id };
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, &operation).await?;
+        let op_hash = operation.get_hash_code();
+        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
             return Ok(()); // idempotency
         }
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
-        let mut old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
+        let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
         if old_tx.account_id() != account_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
         let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
-        let mut old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
+        let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
         new_tx.set_state(TransactionState::Chargeback)?;
@@ -165,7 +202,7 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, &operation).await?;
+        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
