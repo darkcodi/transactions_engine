@@ -134,7 +134,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         new_tx.set_state(TransactionState::Disputed)?;
 
         let mut new_acc = old_acc.clone();
-        new_acc.dispute(new_tx.amount());
+        new_acc.dispute(new_tx.amount())?;
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
@@ -166,7 +166,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         new_tx.set_state(TransactionState::Resolved)?;
 
         let mut new_acc = old_acc.clone();
-        new_acc.resolve(new_tx.amount());
+        new_acc.resolve(new_tx.amount())?;
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
@@ -198,7 +198,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         new_tx.set_state(TransactionState::Chargeback)?;
 
         let mut new_acc = old_acc.clone();
-        new_acc.chargeback(new_tx.amount());
+        new_acc.chargeback(new_tx.amount())?;
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
