@@ -12,6 +12,7 @@ pub trait Storage {
     async fn update_tx(&self, db_tx: &mut Self::DbTx, old_tx: &Transaction, new_tx: &Transaction) -> Result<(), DbError>;
 
     async fn get_account(&self, db_tx: &mut Self::DbTx, acc_id: u16) -> Result<Option<Account>, DbError>;
+    async fn get_all_accounts(&self, db_tx: &mut Self::DbTx) -> Result<Vec<Account>, DbError>;
     async fn insert_account(&self, db_tx: &mut Self::DbTx, acc: &Account) -> Result<(), DbError>;
     async fn update_account(&self, db_tx: &mut Self::DbTx, old_acc: &Account, new_acc: &Account) -> Result<(), DbError>;
 
@@ -94,6 +95,17 @@ impl Storage for EchoDbStorage {
         } else {
             Ok(None)
         }
+    }
+
+    async fn get_all_accounts(&self, db_tx: &mut Self::DbTx) -> Result<Vec<Account>, DbError> {
+        let mut accounts = Vec::new();
+        let from = "acc:".to_string();
+        let to = "acd:".to_string();
+        for (_key, data) in db_tx.scan(from..to, usize::MAX)? {
+            let acc: Account = rmp_serde::from_slice(&data)?;
+            accounts.push(acc);
+        }
+        Ok(accounts)
     }
 
     async fn insert_account(&self, db_tx: &mut Self::DbTx, acc: &Account) -> Result<(), DbError> {

@@ -1,5 +1,5 @@
 use std::{env, io};
-use crate::csv_parser::{CsvOperation, CsvParseError};
+use crate::csv_parser::{CsvAccount, CsvOperation, CsvParseError};
 use crate::engine::{Engine, Operation};
 use crate::storage::EchoDbStorage;
 
@@ -52,5 +52,19 @@ async fn main() {
         counter += 1;
     }
 
-    // println!("processed {} operations", counter);
+    let all_accounts = engine.get_all_accounts().await;
+    if all_accounts.is_err() {
+        eprintln!("error getting all accounts: {:?}", all_accounts.err());
+        return;
+    }
+
+    let mut writer = csv::Writer::from_writer(io::stdout());
+
+    for account in all_accounts.unwrap() {
+        let csv_account: CsvAccount = account.into();
+        if writer.serialize(csv_account).is_err() {
+            eprintln!("error writing csv: {:?}", writer.into_inner().err());
+            return;
+        }
+    }
 }

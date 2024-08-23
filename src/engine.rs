@@ -57,6 +57,13 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
     }
 
+    pub async fn get_all_accounts(&mut self) -> Result<Vec<Account>, EngineError> {
+        let mut db_tx = self.storage.start_db_tx().await?;
+        let accounts = self.storage.get_all_accounts(&mut db_tx).await?;
+        self.storage.commit_db_tx(db_tx).await?;
+        Ok(accounts)
+    }
+
     pub async fn deposit(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 

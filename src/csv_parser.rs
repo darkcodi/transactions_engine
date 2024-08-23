@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use crate::account::Account;
 use crate::decimal::Decimal4;
 use crate::engine::Operation;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CsvOperation {
     #[serde(rename = "type")]
     op_type: Option<String>,
@@ -41,6 +42,27 @@ impl TryInto<Operation> for CsvOperation {
         };
 
         Ok(op_type)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CsvAccount {
+    client: u16,
+    available: Decimal4,
+    held: Decimal4,
+    total: Decimal4,
+    locked: bool,
+}
+
+impl From<Account> for CsvAccount {
+    fn from(value: Account) -> Self {
+        Self {
+            client: value.id(),
+            available: value.available(),
+            held: value.held(),
+            total: value.total(),
+            locked: value.locked(),
+        }
     }
 }
 
