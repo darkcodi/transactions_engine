@@ -6,11 +6,11 @@ use crate::storage::{DbError, Storage};
 use crate::transaction::{Transaction, TransactionState, TransactionType, TxUpdateError};
 
 pub enum Operation {
-    Deposit { account_id: u16, tx_id: u32, amount: Decimal4 },
-    Withdraw { account_id: u16, tx_id: u32, amount: Decimal4 },
-    Dispute { account_id: u16, tx_id: u32 },
-    Resolve { account_id: u16, tx_id: u32 },
-    Chargeback { account_id: u16, tx_id: u32 },
+    Deposit { acc_id: u16, tx_id: u32, amount: Decimal4 },
+    Withdraw { acc_id: u16, tx_id: u32, amount: Decimal4 },
+    Dispute { acc_id: u16, tx_id: u32 },
+    Resolve { acc_id: u16, tx_id: u32 },
+    Chargeback { acc_id: u16, tx_id: u32 },
 }
 
 impl Operation {
@@ -24,11 +24,11 @@ impl Operation {
 impl Hash for Operation {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let (op_str, acc_id, tx_id) = match self {
-            Operation::Deposit { account_id, tx_id, amount: _ } => ("deposit", account_id, tx_id),
-            Operation::Withdraw { account_id, tx_id, amount: _ } => ("withdraw", account_id, tx_id),
-            Operation::Dispute { account_id, tx_id } => ("dispute", account_id, tx_id),
-            Operation::Resolve { account_id, tx_id } => ("resolve", account_id, tx_id),
-            Operation::Chargeback { account_id, tx_id } => ("chargeback", account_id, tx_id),
+            Operation::Deposit { acc_id, tx_id, amount: _ } => ("deposit", acc_id, tx_id),
+            Operation::Withdraw { acc_id, tx_id, amount: _ } => ("withdraw", acc_id, tx_id),
+            Operation::Dispute { acc_id, tx_id } => ("dispute", acc_id, tx_id),
+            Operation::Resolve { acc_id, tx_id } => ("resolve", acc_id, tx_id),
+            Operation::Chargeback { acc_id, tx_id } => ("chargeback", acc_id, tx_id),
         };
         op_str.hash(state);
         acc_id.hash(state);
@@ -47,10 +47,10 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
     }
 
-    pub async fn deposit(&mut self, account_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+    pub async fn deposit(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Deposit { account_id, tx_id, amount };
+        let operation = Operation::Deposit { acc_id, tx_id, amount };
         let op_hash = operation.get_hash_code();
         let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
@@ -63,16 +63,16 @@ impl<TStorage: Storage> Engine<TStorage> {
             return Err(EngineError::TransactionWithTheSameIdAlreadyExists);
         }
 
-        let tx = Transaction::new(tx_id, account_id, TransactionType::Deposit, amount);
+        let tx = Transaction::new(tx_id, acc_id, TransactionType::Deposit, amount);
         self.storage.insert_tx(&mut db_tx, &tx).await?;
 
-        let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
+        let maybe_account = self.storage.get_account(&mut db_tx, acc_id).await?;
         if let Some(old_acc) = maybe_account {
             let mut new_acc = old_acc.clone();
             new_acc.deposit(amount)?;
             self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
         } else {
-            let mut new_acc = Account::new(account_id);
+            let mut new_acc = Account::new(acc_id);
             new_acc.deposit(amount)?;
             self.storage.insert_account(&mut db_tx, &new_acc).await?;
         }
@@ -82,10 +82,10 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn withdraw(&mut self, account_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+    pub async fn withdraw(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Withdraw { account_id, tx_id, amount };
+        let operation = Operation::Withdraw { acc_id, tx_id, amount };
         let op_hash = operation.get_hash_code();
         let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
@@ -98,12 +98,12 @@ impl<TStorage: Storage> Engine<TStorage> {
             return Err(EngineError::TransactionWithTheSameIdAlreadyExists);
         }
 
-        let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
+        let maybe_account = self.storage.get_account(&mut db_tx, acc_id).await?;
         let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
         let mut new_acc = old_acc.clone();
         new_acc.withdraw(amount)?;
 
-        let tx = Transaction::new(tx_id, account_id, TransactionType::Withdrawal, amount);
+        let tx = Transaction::new(tx_id, acc_id, TransactionType::Withdrawal, amount);
         self.storage.insert_tx(&mut db_tx, &tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
         self.storage.insert_operation(&mut db_tx, op_hash).await?;
@@ -111,10 +111,10 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn dispute(&mut self, account_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn dispute(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Dispute { account_id, tx_id };
+        let operation = Operation::Dispute { acc_id, tx_id };
         let op_hash = operation.get_hash_code();
         let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
@@ -123,11 +123,11 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if old_tx.account_id() != account_id {
+        if old_tx.account_id() != acc_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
-        let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
+        let maybe_account = self.storage.get_account(&mut db_tx, acc_id).await?;
         let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
@@ -143,10 +143,10 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn resolve(&mut self, account_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn resolve(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Resolve { account_id, tx_id };
+        let operation = Operation::Resolve { acc_id, tx_id };
         let op_hash = operation.get_hash_code();
         let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
@@ -155,11 +155,11 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if old_tx.account_id() != account_id {
+        if old_tx.account_id() != acc_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
-        let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
+        let maybe_account = self.storage.get_account(&mut db_tx, acc_id).await?;
         let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
@@ -175,10 +175,10 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn chargeback(&mut self, account_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn chargeback(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Chargeback { account_id, tx_id };
+        let operation = Operation::Chargeback { acc_id, tx_id };
         let op_hash = operation.get_hash_code();
         let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
         if operation_processed {
@@ -187,11 +187,11 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
-        if old_tx.account_id() != account_id {
+        if old_tx.account_id() != acc_id {
             return Err(EngineError::TransactionIsBoundToAnotherAccount(old_tx.account_id()));
         }
 
-        let maybe_account = self.storage.get_account(&mut db_tx, account_id).await?;
+        let maybe_account = self.storage.get_account(&mut db_tx, acc_id).await?;
         let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
