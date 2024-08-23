@@ -89,7 +89,7 @@ impl Account {
     }
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum AccountUpdateError {
     #[error("account locked")]
     AccountLocked,
@@ -103,30 +103,72 @@ mod account_tests {
     use super::*;
 
     #[test]
-    fn account_deposit_on_locked_account() {
+    fn account_deposit_on_locked_account_err() {
         let mut acc = Account::new(1);
         acc.deposit(4.into()).unwrap();
         acc.dispute(2.into()).unwrap();
         acc.chargeback(2.into()).unwrap();
-        let result = acc.deposit(1.into());
-        assert_eq!(result, Err(AccountUpdateError::AccountLocked));
+        assert_eq!(acc.deposit(1.into()), Err(AccountUpdateError::AccountLocked));
     }
 
     #[test]
-    fn account_withdraw_on_locked_account() {
+    fn account_withdraw_on_locked_account_err() {
         let mut acc = Account::new(1);
         acc.deposit(4.into()).unwrap();
         acc.dispute(2.into()).unwrap();
         acc.chargeback(2.into()).unwrap();
-        let result = acc.withdraw(1.into());
-        assert_eq!(result, Err(AccountUpdateError::AccountLocked));
+        assert_eq!(acc.withdraw(1.into()), Err(AccountUpdateError::AccountLocked));
     }
 
     #[test]
-    fn account_withdraw_on_insufficient_funds() {
+    fn account_withdraw_on_insufficient_funds_err() {
         let mut acc = Account::new(1);
         acc.deposit(4.into()).unwrap();
-        let result = acc.withdraw(5.into());
-        assert_eq!(result, Err(AccountUpdateError::InsufficientFunds));
+        assert_eq!(acc.withdraw(5.into()), Err(AccountUpdateError::InsufficientFunds));
+    }
+
+    #[test]
+    fn account_deposit_ok() {
+        let mut acc = Account::new(1);
+        acc.deposit(4.into()).unwrap();
+        assert_eq!(acc.available(), 4.into());
+    }
+
+    #[test]
+    fn account_withdraw_ok() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.withdraw(2.into()).unwrap();
+        assert_eq!(acc.available(), 3.into());
+    }
+
+    #[test]
+    fn account_dispute_ok() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(2.into()).unwrap();
+        assert_eq!(acc.available(), 3.into());
+        assert_eq!(acc.held(), 2.into());
+    }
+
+    #[test]
+    fn account_resolve_ok() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(2.into()).unwrap();
+        acc.resolve(2.into()).unwrap();
+        assert_eq!(acc.available(), 5.into());
+        assert_eq!(acc.held(), 0.into());
+    }
+
+    #[test]
+    fn account_chargeback_ok() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(2.into()).unwrap();
+        acc.chargeback(2.into()).unwrap();
+        assert_eq!(acc.available(), 3.into());
+        assert_eq!(acc.held(), 0.into());
+        assert_eq!(acc.locked(), true);
     }
 }

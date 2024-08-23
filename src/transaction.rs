@@ -94,7 +94,7 @@ impl Transaction {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TxUpdateError {
     #[error("invalid transaction type: only deposits can be disputed/resolved/chargebacked")]
     InvalidTxType,
@@ -119,24 +119,75 @@ mod transaction_tests {
     }
 
     #[test]
-    fn set_state() {
+    fn resolve_after_dispute_ok() {
         let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
-        assert_eq!(tx.state(), TransactionState::Posted);
-        assert_eq!(tx.version(), 0);
-
-        let change_state_result = tx.set_state(TransactionState::Disputed);
-        assert!(change_state_result.is_ok());
-        assert_eq!(tx.state(), TransactionState::Disputed);
-        assert_eq!(tx.version(), 1);
-
-        let change_state_result = tx.set_state(TransactionState::Resolved);
-        assert!(change_state_result.is_ok());
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Resolved), Ok(()));
         assert_eq!(tx.state(), TransactionState::Resolved);
         assert_eq!(tx.version(), 2);
+    }
 
-        let change_state_result = tx.set_state(TransactionState::Chargeback);
-        assert!(change_state_result.is_err());
+    #[test]
+    fn resolve_after_chargeback_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Chargeback), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Resolved), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Chargeback, to: TransactionState::Resolved }));
+        assert_eq!(tx.state(), TransactionState::Chargeback);
+        assert_eq!(tx.version(), 2);
+    }
+
+    #[test]
+    fn resolve_after_posted_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Resolved), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Resolved }));
+        assert_eq!(tx.state(), TransactionState::Posted);
+        assert_eq!(tx.version(), 0);
+    }
+
+    #[test]
+    fn dispute_after_posted_ok() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.state(), TransactionState::Disputed);
+        assert_eq!(tx.version(), 1);
+    }
+
+    #[test]
+    fn dispute_after_resolved_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Resolved), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Resolved, to: TransactionState::Disputed }));
         assert_eq!(tx.state(), TransactionState::Resolved);
+        assert_eq!(tx.version(), 2);
+    }
+
+    #[test]
+    fn chargeback_after_posted_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Chargeback), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Chargeback }));
+        assert_eq!(tx.state(), TransactionState::Posted);
+        assert_eq!(tx.version(), 0);
+    }
+
+    #[test]
+    fn chargeback_after_resolved_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Resolved), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Chargeback), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Resolved, to: TransactionState::Chargeback }));
+        assert_eq!(tx.state(), TransactionState::Resolved);
+        assert_eq!(tx.version(), 2);
+    }
+
+    #[test]
+    fn dispute_after_chargeback_err() {
+        let mut tx = Transaction::new(1, 1, TransactionType::Deposit, Decimal4::from(100));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Chargeback), Ok(()));
+        assert_eq!(tx.set_state(TransactionState::Disputed), Err(TxUpdateError::ForbiddenTxStateTransition { from: TransactionState::Chargeback, to: TransactionState::Disputed }));
+        assert_eq!(tx.state(), TransactionState::Chargeback);
         assert_eq!(tx.version(), 2);
     }
 }

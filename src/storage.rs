@@ -24,7 +24,7 @@ pub trait Storage {
     async fn commit_db_tx(&mut self, db_tx: Self::DbTx) -> Result<(), DbError>;
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum DbError {
     #[error("insertion failed because entity already exists")]
     EntityAlreadyExists,
