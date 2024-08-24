@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use crate::account::{Account, AccountUpdateError};
@@ -5,6 +6,7 @@ use crate::decimal::Decimal4;
 use crate::storage::{DbError, Storage};
 use crate::transaction::{Transaction, TransactionState, TransactionType, TxUpdateError};
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Operation {
     Deposit { acc_id: u16, tx_id: u32, amount: Decimal4 },
     Withdraw { acc_id: u16, tx_id: u32, amount: Decimal4 },
@@ -37,7 +39,7 @@ impl Hash for Operation {
 }
 
 pub struct Engine<TStorage: Storage> {
-    pub storage: Box<TStorage>,
+    storage: Box<TStorage>,
 }
 
 impl<TStorage: Storage> Engine<TStorage> {
@@ -55,6 +57,13 @@ impl<TStorage: Storage> Engine<TStorage> {
             Operation::Resolve { acc_id, tx_id } => self.resolve(acc_id, tx_id).await,
             Operation::Chargeback { acc_id, tx_id } => self.chargeback(acc_id, tx_id).await,
         }
+    }
+
+    pub async fn get_account(&mut self, acc_id: u16) -> Result<Option<Account>, EngineError> {
+        let mut db_tx = self.storage.start_db_tx().await?;
+        let account = self.storage.get_account(&mut db_tx, acc_id).await?;
+        self.storage.commit_db_tx(db_tx).await?;
+        Ok(account)
     }
 
     pub async fn get_all_accounts(&mut self) -> Result<Vec<Account>, EngineError> {
@@ -222,6 +231,12 @@ impl<TStorage: Storage> Engine<TStorage> {
         self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
+    }
+}
+
+impl<TStorage: Storage> Debug for Engine<TStorage> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Engine").finish()
     }
 }
 

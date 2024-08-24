@@ -2,17 +2,9 @@ use std::io;
 
 use anyhow::Context;
 use clap::{Arg, Command};
-
-use crate::csv_parser::{CsvAccount, CsvOperation, CsvParseError};
-use crate::engine::{Engine, Operation};
-use crate::storage::EchoDbStorage;
-
-mod decimal;
-mod transaction;
-mod engine;
-mod storage;
-mod account;
-mod csv_parser;
+use transactions_engine::engine::{Engine, Operation};
+use transactions_engine::storage::EchoDbStorage;
+use transactions_engine::csv_parser::{CsvAccount, CsvOperation, CsvParseError};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

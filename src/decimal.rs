@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::str::FromStr;
 use rust_decimal::{Decimal, RoundingStrategy};
-use rust_decimal::prelude::Zero;
+use rust_decimal::prelude::{FromPrimitive, Zero};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A wrapper around [`rust_decimal::Decimal`] that serializes and deserializes with four decimal places.
@@ -45,6 +45,16 @@ impl From<i32> for Decimal4 {
 impl From<u32> for Decimal4 {
     fn from(value: u32) -> Self {
         Decimal4(Decimal::from(value))
+    }
+}
+
+impl TryFrom<f32> for Decimal4 {
+    type Error = rust_decimal::Error;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        let decimal = Decimal::from_f32(value)
+            .ok_or(rust_decimal::Error::ErrorString("failed to parse f32".to_string()))?;
+        Ok(Decimal4::from(decimal))
     }
 }
 
