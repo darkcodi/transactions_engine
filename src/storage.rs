@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::account::Account;
 use crate::transaction::Transaction;
 
+#[trait_variant::make(Send)]
 pub trait Storage {
     type DbTx;
 
