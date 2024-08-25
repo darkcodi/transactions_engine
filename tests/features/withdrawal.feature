@@ -8,12 +8,14 @@ Feature: Withdrawal
   Scenario: Single withdrawal, empty account, insufficient funds
     Given A user has an empty account
     When the user withdraws $200
-    Then the user's balance should be unchanged
+    Then the last operation should fail
+    And the user's balance should be unchanged
 
   Scenario: Single withdrawal, has some funds, insufficient funds
     Given A user has an account with $100
     When the user withdraws $200
-    Then the user's balance should be unchanged
+    Then the last operation should fail
+    And the user's balance should be unchanged
 
   Scenario: Multiple withdrawals
     Given A user has an account with $100
@@ -27,4 +29,5 @@ Feature: Withdrawal
     When the user withdraws $50
     And the user withdraws $30
     And the user withdraws $75
-    Then the user's balance should be $20
+    Then the last operation should fail
+    And the user's balance should be $20

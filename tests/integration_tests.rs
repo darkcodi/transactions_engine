@@ -1,7 +1,7 @@
 use cucumber::{given, then, when, World};
 use transactions_engine::account::Account;
 use transactions_engine::decimal::Decimal4;
-use transactions_engine::engine::Engine;
+use transactions_engine::engine::{Engine, EngineError};
 use transactions_engine::storage::EchoDbStorage;
 
 #[derive(cucumber::World, Debug)]
@@ -9,15 +9,21 @@ use transactions_engine::storage::EchoDbStorage;
 struct TransactionsEngineWorld {
     engine: Engine<EchoDbStorage>,
     tx_counter: u32,
-    given_acc: Option<Account>,
+    given_acc: Account,
+    last_result: Result<(), EngineError>,
+    last_deposit_tx: u32,
+    last_disputed_tx: u32,
 }
 
 impl TransactionsEngineWorld {
     fn new() -> Self {
         Self {
-            engine: Engine::new(EchoDbStorage::new()),
+            engine: Engine::default(),
             tx_counter: 0,
-            given_acc: None,
+            given_acc: Account::default(),
+            last_result: Ok(()),
+            last_deposit_tx: 0,
+            last_disputed_tx: 0,
         }
     }
 }
@@ -30,27 +36,48 @@ async fn given_empty_acc(world: &mut TransactionsEngineWorld) -> anyhow::Result<
 #[given(expr = "A user has an account with ${float}")]
 async fn given_acc_with_amount(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
     user_deposits(world, amount).await?;
-    world.given_acc = Some(world.engine.get_account(1).await?.ok_or(anyhow::anyhow!("Account not found"))?);
+    world.given_acc = world.engine.get_account(1).await?.ok_or(anyhow::anyhow!("Account not found"))?;
     Ok(())
 }
 
 #[when(expr = "the user deposits ${float}")]
 async fn user_deposits(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
-    let _ = world.engine.deposit(1, world.tx_counter, amount.try_into()?).await;
+    world.last_result = world.engine.deposit(1, world.tx_counter, amount.try_into()?).await;
+    world.last_deposit_tx = world.tx_counter;
     world.tx_counter += 1;
     Ok(())
 }
 
 #[when(expr = "the user withdraws ${float}")]
 async fn user_withdraws(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
-    let _ = world.engine.withdraw(1, world.tx_counter, amount.try_into()?).await;
+    world.last_result = world.engine.withdraw(1, world.tx_counter, amount.try_into()?).await;
     world.tx_counter += 1;
     Ok(())
 }
 
 #[when("the user disputes the last transaction")]
 async fn user_disputes_last_tx(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
-    let _ = world.engine.dispute(1, world.tx_counter - 1).await;
+    world.last_result = world.engine.dispute(1, world.tx_counter - 1).await;
+    world.last_disputed_tx = world.tx_counter - 1;
+    Ok(())
+}
+
+#[when("the user disputes the last deposit transaction")]
+async fn user_disputes_last_deposit(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    world.last_result = world.engine.dispute(1, world.last_deposit_tx).await;
+    world.last_disputed_tx = world.last_deposit_tx;
+    Ok(())
+}
+
+#[when("the the last disputed tx is resolved")]
+async fn user_resolves_last_dispute(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    world.last_result = world.engine.resolve(1, world.last_disputed_tx).await;
+    Ok(())
+}
+
+#[when("the the last disputed tx is charged back")]
+async fn user_charges_back_last_dispute(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    world.last_result = world.engine.chargeback(1, world.last_disputed_tx).await;
     Ok(())
 }
 
@@ -87,9 +114,21 @@ async fn user_balance_is(world: &mut TransactionsEngineWorld, amount: f32) -> an
 #[then(expr = "the user's balance should be unchanged")]
 async fn user_balance_is_unchanged(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
     let acc = world.engine.get_account(1).await?.ok_or(anyhow::anyhow!("Account not found"))?;
-    assert_eq!(acc.total(), world.given_acc.as_ref().unwrap().total());
-    assert_eq!(acc.available(), world.given_acc.as_ref().unwrap().available());
-    assert_eq!(acc.held(), world.given_acc.as_ref().unwrap().held());
+    assert_eq!(acc.total(), world.given_acc.total());
+    assert_eq!(acc.available(), world.given_acc.available());
+    assert_eq!(acc.held(), world.given_acc.held());
+    Ok(())
+}
+
+#[then("the last operation should fail")]
+async fn last_operation_fails(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    assert!(world.last_result.is_err());
+    Ok(())
+}
+
+#[then("the last operation should succeed")]
+async fn last_operation_succeeds(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    assert!(world.last_result.is_ok());
     Ok(())
 }
 
@@ -98,4 +137,5 @@ async fn main() {
     TransactionsEngineWorld::run("tests/features/deposit.feature").await;
     TransactionsEngineWorld::run("tests/features/withdrawal.feature").await;
     TransactionsEngineWorld::run("tests/features/dispute.feature").await;
+    TransactionsEngineWorld::run("tests/features/resolve.feature").await;
 }

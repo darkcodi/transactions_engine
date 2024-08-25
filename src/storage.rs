@@ -2,6 +2,7 @@ use echodb::Error;
 use thiserror::Error;
 
 use crate::account::Account;
+use crate::engine::Engine;
 use crate::transaction::Transaction;
 
 #[trait_variant::make(Send)]
@@ -42,11 +43,23 @@ pub struct EchoDbStorage {
     db: echodb::Db<String, Vec<u8>>,
 }
 
-impl EchoDbStorage {
-    pub fn new() -> Self {
+impl Default for EchoDbStorage {
+    fn default() -> Self {
         Self {
             db: echodb::new(),
         }
+    }
+}
+
+impl Default for Engine<EchoDbStorage> {
+    fn default() -> Self {
+        Self::new(EchoDbStorage::default())
+    }
+}
+
+impl EchoDbStorage {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn get_key_for_tx(tx_id: u32) -> String {
