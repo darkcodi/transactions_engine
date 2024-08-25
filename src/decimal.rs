@@ -16,6 +16,18 @@ impl Decimal4 {
     pub fn zero() -> Self {
         Decimal4(Decimal::zero())
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.0.is_sign_negative() && !self.0.is_zero()
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.0.is_sign_positive() && !self.0.is_zero()
+    }
 }
 
 impl Display for Decimal4 {
@@ -151,5 +163,51 @@ mod decimal4_tests {
         let b = Decimal4::from_str("2.3456").unwrap();
         let c = a - b;
         assert_eq!("-1.1111".to_string(), c.to_string());
+    }
+
+    #[test]
+    fn decimal4_addition_assignment() {
+        let mut a = Decimal4::from_str("1.2345").unwrap();
+        let b = Decimal4::from_str("2.3456").unwrap();
+        a += b;
+        assert_eq!("3.5801".to_string(), a.to_string());
+    }
+
+    #[test]
+    fn decimal4_subtraction_assignment() {
+        let mut a = Decimal4::from_str("1.2345").unwrap();
+        let b = Decimal4::from_str("2.3456").unwrap();
+        a -= b;
+        assert_eq!("-1.1111".to_string(), a.to_string());
+    }
+
+    #[test]
+    fn decimal4_is_zero() {
+        let a = Decimal4::from_str("0").unwrap();
+        assert!(a.is_zero());
+        let a = Decimal4::from_str("0.0000").unwrap();
+        assert!(a.is_zero());
+        let a = Decimal4::from_str("0.0001").unwrap();
+        assert!(!a.is_zero());
+    }
+
+    #[test]
+    fn decimal4_is_negative() {
+        let a = Decimal4::from_str("-0.0001").unwrap();
+        assert!(a.is_negative());
+        let a = Decimal4::from_str("0").unwrap();
+        assert!(!a.is_negative());
+        let a = Decimal4::from_str("0.0001").unwrap();
+        assert!(!a.is_negative());
+    }
+
+    #[test]
+    fn decimal4_is_positive() {
+        let a = Decimal4::from_str("0.0001").unwrap();
+        assert!(a.is_positive());
+        let a = Decimal4::from_str("0").unwrap();
+        assert!(!a.is_positive());
+        let a = Decimal4::from_str("-0.0001").unwrap();
+        assert!(!a.is_positive());
     }
 }

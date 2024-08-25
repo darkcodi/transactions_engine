@@ -31,3 +31,9 @@ Feature: Withdrawal
     And the user withdraws $75
     Then the last operation should fail
     And the user's balance should be $20
+
+  Scenario: Withdrawal zero should fail
+    Given A user has an account with $100
+    When the user withdraws $0
+    Then the last operation should fail
+    And the user's balance should be $100

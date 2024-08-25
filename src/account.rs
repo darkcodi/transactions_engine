@@ -47,6 +47,9 @@ impl Account {
     }
 
     pub fn deposit(&mut self, amount: Decimal4) -> Result<(), AccountUpdateError> {
+        if !amount.is_positive() {
+            return Err(AccountUpdateError::AmountIsNotPositive);
+        }
         if self.locked {
             return Err(AccountUpdateError::AccountLocked);
         }
@@ -56,6 +59,9 @@ impl Account {
     }
 
     pub fn withdraw(&mut self, amount: Decimal4) -> Result<(), AccountUpdateError> {
+        if !amount.is_positive() {
+            return Err(AccountUpdateError::AmountIsNotPositive);
+        }
         if self.locked {
             return Err(AccountUpdateError::AccountLocked);
         }
@@ -68,6 +74,9 @@ impl Account {
     }
 
     pub fn dispute(&mut self, amount: Decimal4) -> Result<(), AccountUpdateError> {
+        if !amount.is_positive() {
+            return Err(AccountUpdateError::AmountIsNotPositive);
+        }
         self.available -= amount;
         self.held += amount;
         self.version += 1;
@@ -75,6 +84,9 @@ impl Account {
     }
 
     pub fn resolve(&mut self, amount: Decimal4) -> Result<(), AccountUpdateError> {
+        if !amount.is_positive() {
+            return Err(AccountUpdateError::AmountIsNotPositive);
+        }
         self.held -= amount;
         self.available += amount;
         self.version += 1;
@@ -82,6 +94,9 @@ impl Account {
     }
 
     pub fn chargeback(&mut self, amount: Decimal4) -> Result<(), AccountUpdateError> {
+        if !amount.is_positive() {
+            return Err(AccountUpdateError::AmountIsNotPositive);
+        }
         self.held -= amount;
         self.locked = true;
         self.version += 1;
@@ -96,6 +111,9 @@ pub enum AccountUpdateError {
 
     #[error("insufficient funds")]
     InsufficientFunds,
+
+    #[error("amount is not positive")]
+    AmountIsNotPositive,
 }
 
 #[cfg(test)]
@@ -170,5 +188,76 @@ mod account_tests {
         assert_eq!(acc.available(), 3.into());
         assert_eq!(acc.held(), 0.into());
         assert_eq!(acc.locked(), true);
+    }
+
+    #[test]
+    fn account_version_incremented_on_deposit() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        assert_eq!(acc.version(), 1);
+    }
+
+    #[test]
+    fn account_version_incremented_on_withdraw() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.withdraw(2.into()).unwrap();
+        assert_eq!(acc.version(), 2);
+    }
+
+    #[test]
+    fn account_version_incremented_on_dispute() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(5.into()).unwrap();
+        assert_eq!(acc.version(), 2);
+    }
+
+    #[test]
+    fn account_version_incremented_on_resolve() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(5.into()).unwrap();
+        acc.resolve(5.into()).unwrap();
+        assert_eq!(acc.version(), 3);
+    }
+
+    #[test]
+    fn account_version_incremented_on_chargeback() {
+        let mut acc = Account::new(1);
+        acc.deposit(5.into()).unwrap();
+        acc.dispute(5.into()).unwrap();
+        acc.chargeback(5.into()).unwrap();
+        assert_eq!(acc.version(), 3);
+    }
+
+    #[test]
+    fn account_deposit_amount_not_positive_err() {
+        let mut acc = Account::new(1);
+        assert_eq!(acc.deposit(Decimal4::zero()), Err(AccountUpdateError::AmountIsNotPositive));
+    }
+
+    #[test]
+    fn account_withdraw_amount_not_positive_err() {
+        let mut acc = Account::new(1);
+        assert_eq!(acc.withdraw(Decimal4::zero()), Err(AccountUpdateError::AmountIsNotPositive));
+    }
+
+    #[test]
+    fn account_dispute_amount_not_positive_err() {
+        let mut acc = Account::new(1);
+        assert_eq!(acc.dispute(Decimal4::zero()), Err(AccountUpdateError::AmountIsNotPositive));
+    }
+
+    #[test]
+    fn account_resolve_amount_not_positive_err() {
+        let mut acc = Account::new(1);
+        assert_eq!(acc.resolve(Decimal4::zero()), Err(AccountUpdateError::AmountIsNotPositive));
+    }
+
+    #[test]
+    fn account_chargeback_amount_not_positive_err() {
+        let mut acc = Account::new(1);
+        assert_eq!(acc.chargeback(Decimal4::zero()), Err(AccountUpdateError::AmountIsNotPositive));
     }
 }

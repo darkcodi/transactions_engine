@@ -30,7 +30,9 @@ impl TransactionsEngineWorld {
 
 #[given("A user has an empty account")]
 async fn given_empty_acc(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
-    given_acc_with_amount(world, 0.0).await
+    user_deposits(world, 1.0).await?;
+    user_withdraws(world, 1.0).await?;
+    Ok(())
 }
 
 #[given(expr = "A user has an account with ${float}")]

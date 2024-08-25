@@ -74,6 +74,10 @@ impl<TStorage: Storage> Engine<TStorage> {
     }
 
     pub async fn deposit(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+        if !amount.is_positive() {
+            return Err(EngineError::AmountIsNotPositive);
+        }
+
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Deposit { acc_id, tx_id, amount };
@@ -109,6 +113,10 @@ impl<TStorage: Storage> Engine<TStorage> {
     }
 
     pub async fn withdraw(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+        if !amount.is_positive() {
+            return Err(EngineError::AmountIsNotPositive);
+        }
+
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let operation = Operation::Withdraw { acc_id, tx_id, amount };
@@ -254,6 +262,9 @@ pub enum EngineError {
     #[error("insufficient funds")]
     InsufficientFunds,
 
+    #[error("amount is not positive")]
+    AmountIsNotPositive,
+
     #[error("transaction with the same id already exists")]
     TransactionWithTheSameIdAlreadyExists,
 
@@ -288,6 +299,7 @@ impl From<AccountUpdateError> for EngineError {
         match err {
             AccountUpdateError::AccountLocked => EngineError::AccountLocked,
             AccountUpdateError::InsufficientFunds => EngineError::InsufficientFunds,
+            AccountUpdateError::AmountIsNotPositive => EngineError::AmountIsNotPositive,
         }
     }
 }
