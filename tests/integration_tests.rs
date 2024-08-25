@@ -40,6 +40,15 @@ async fn given_acc_with_amount(world: &mut TransactionsEngineWorld, amount: f32)
     Ok(())
 }
 
+#[given(expr = "A user has an locked account with ${float}")]
+async fn given_locked_acc_with_amount(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
+    user_deposits(world, amount).await?;
+    user_deposits(world, 1.0).await?;
+    user_disputes_last_deposit(world).await?;
+    last_disputed_tx_is_charged_back(world).await?;
+    Ok(())
+}
+
 #[when(expr = "the user deposits ${float}")]
 async fn user_deposits(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
     world.last_result = world.engine.deposit(1, world.tx_counter, amount.try_into()?).await;
@@ -70,13 +79,13 @@ async fn user_disputes_last_deposit(world: &mut TransactionsEngineWorld) -> anyh
 }
 
 #[when("the the last disputed tx is resolved")]
-async fn user_resolves_last_dispute(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+async fn last_disputed_tx_is_resolved(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
     world.last_result = world.engine.resolve(1, world.last_disputed_tx).await;
     Ok(())
 }
 
 #[when("the the last disputed tx is charged back")]
-async fn user_charges_back_last_dispute(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+async fn last_disputed_tx_is_charged_back(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
     world.last_result = world.engine.chargeback(1, world.last_disputed_tx).await;
     Ok(())
 }
@@ -132,6 +141,20 @@ async fn last_operation_succeeds(world: &mut TransactionsEngineWorld) -> anyhow:
     Ok(())
 }
 
+#[then("the user's account should not be locked")]
+async fn user_account_not_locked(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    let acc = world.engine.get_account(1).await?.ok_or(anyhow::anyhow!("Account not found"))?;
+    assert!(!acc.locked());
+    Ok(())
+}
+
+#[then("the user's account should be locked")]
+async fn user_account_locked(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    let acc = world.engine.get_account(1).await?.ok_or(anyhow::anyhow!("Account not found"))?;
+    assert!(acc.locked());
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     TransactionsEngineWorld::run("tests/features/deposit.feature").await;
@@ -139,4 +162,5 @@ async fn main() {
     TransactionsEngineWorld::run("tests/features/dispute.feature").await;
     TransactionsEngineWorld::run("tests/features/resolve.feature").await;
     TransactionsEngineWorld::run("tests/features/chargeback.feature").await;
+    TransactionsEngineWorld::run("tests/features/lock_account.feature").await;
 }
