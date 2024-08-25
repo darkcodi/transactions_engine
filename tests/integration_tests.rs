@@ -138,4 +138,5 @@ async fn main() {
     TransactionsEngineWorld::run("tests/features/withdrawal.feature").await;
     TransactionsEngineWorld::run("tests/features/dispute.feature").await;
     TransactionsEngineWorld::run("tests/features/resolve.feature").await;
+    TransactionsEngineWorld::run("tests/features/chargeback.feature").await;
 }
