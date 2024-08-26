@@ -22,3 +22,13 @@ Feature: Dispute
     Then the last operation should succeed
     And the user's available balance should be $-100
     And the user's held balance should be $100
+
+  Scenario: Dispute a transaction after resolving a dispute
+    Given A user has an empty account
+    When the user deposits $100
+    And the user disputes the last transaction
+    And the the last disputed tx is resolved
+    And the user disputes the last transaction
+    Then the last operation should succeed
+    And the user's available balance should be $0
+    And the user's held balance should be $100

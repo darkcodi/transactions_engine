@@ -150,13 +150,6 @@ impl<TStorage: Storage> Engine<TStorage> {
     pub async fn dispute(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
-        let operation = Operation::Dispute { acc_id, tx_id };
-        let op_hash = operation.get_hash_code();
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
-        if operation_processed {
-            return Ok(()); // idempotency
-        }
-
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
         if old_tx.account_id() != acc_id {
@@ -174,20 +167,12 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
 
     pub async fn resolve(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
-
-        let operation = Operation::Resolve { acc_id, tx_id };
-        let op_hash = operation.get_hash_code();
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
-        if operation_processed {
-            return Ok(()); // idempotency
-        }
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
@@ -199,27 +184,19 @@ impl<TStorage: Storage> Engine<TStorage> {
         let old_acc = maybe_account.ok_or(EngineError::AccountNotFound)?;
 
         let mut new_tx = old_tx.clone();
-        new_tx.set_state(TransactionState::Resolved)?;
+        new_tx.set_state(TransactionState::Posted)?;
 
         let mut new_acc = old_acc.clone();
         new_acc.resolve(new_tx.amount())?;
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
 
     pub async fn chargeback(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
-
-        let operation = Operation::Chargeback { acc_id, tx_id };
-        let op_hash = operation.get_hash_code();
-        let operation_processed = self.storage.is_operation_processed(&mut db_tx, op_hash).await?;
-        if operation_processed {
-            return Ok(()); // idempotency
-        }
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
         let old_tx = maybe_tx.ok_or(EngineError::TransactionNotFound)?;
@@ -238,7 +215,6 @@ impl<TStorage: Storage> Engine<TStorage> {
 
         self.storage.update_tx(&mut db_tx, &old_tx, &new_tx).await?;
         self.storage.update_account(&mut db_tx, &old_acc, &new_acc).await?;
-        self.storage.insert_operation(&mut db_tx, op_hash).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(())
     }
@@ -381,11 +357,11 @@ mod engine_tests {
     }
 
     #[tokio::test]
-    async fn dispute_idempotency() {
+    async fn dispute_no_idempotency() {
         let mut engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
-        assert_eq!(engine.dispute(1, 1).await, Ok(()));
+        assert_eq!(engine.dispute(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Disputed, to: TransactionState::Disputed }));
         let mut db_tx = engine.storage.start_db_tx().await.unwrap();
         let acc = engine.storage.get_account(&mut db_tx, 1).await.unwrap().unwrap();
         assert_eq!(acc.available(), Decimal4::from(0));
@@ -393,12 +369,12 @@ mod engine_tests {
     }
 
     #[tokio::test]
-    async fn resolve_idempotency() {
+    async fn resolve_no_idempotency() {
         let mut engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
-        assert_eq!(engine.resolve(1, 1).await, Ok(()));
+        assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Posted }));
         let mut db_tx = engine.storage.start_db_tx().await.unwrap();
         let acc = engine.storage.get_account(&mut db_tx, 1).await.unwrap().unwrap();
         assert_eq!(acc.available(), Decimal4::from(100));
@@ -406,12 +382,12 @@ mod engine_tests {
     }
 
     #[tokio::test]
-    async fn chargeback_idempotency() {
+    async fn chargeback_no_idempotency() {
         let mut engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
-        assert_eq!(engine.chargeback(1, 1).await, Ok(()));
+        assert_eq!(engine.chargeback(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Chargeback, to: TransactionState::Chargeback }));
         let mut db_tx = engine.storage.start_db_tx().await.unwrap();
         let acc = engine.storage.get_account(&mut db_tx, 1).await.unwrap().unwrap();
         assert_eq!(acc.available(), Decimal4::from(0));
@@ -519,14 +495,14 @@ mod engine_tests {
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
-        assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Chargeback, to: TransactionState::Resolved }));
+        assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Chargeback, to: TransactionState::Posted }));
     }
 
     #[tokio::test]
     async fn resolve_after_posted_err() {
         let mut engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
-        assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Resolved }));
+        assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Posted }));
     }
 
     #[tokio::test]
@@ -537,11 +513,12 @@ mod engine_tests {
     }
 
     #[tokio::test]
-    async fn chargeback_after_resolved_err() {
+    async fn chargeback_after_resolve_and_second_dispute_ok() {
         let mut engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
-        assert_eq!(engine.chargeback(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Resolved, to: TransactionState::Chargeback }));
+        assert_eq!(engine.dispute(1, 1).await, Ok(()));
+        assert_eq!(engine.chargeback(1, 1).await, Ok(()));
     }
 }
