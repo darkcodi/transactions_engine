@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -41,13 +42,13 @@ impl Hash for Operation {
 }
 
 pub struct Engine<TStorage: Storage> {
-    storage: Box<TStorage>,
+    storage: Arc<TStorage>,
 }
 
 impl<TStorage: Storage> Engine<TStorage> {
     pub fn new(storage: TStorage) -> Self {
         Self {
-            storage: Box::new(storage),
+            storage: Arc::new(storage),
         }
     }
 
@@ -223,6 +224,14 @@ impl<TStorage: Storage> Engine<TStorage> {
 impl<TStorage: Storage> Debug for Engine<TStorage> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Engine").finish()
+    }
+}
+
+impl<TStorage: Storage> Clone for Engine<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+        }
     }
 }
 
@@ -520,5 +529,36 @@ mod engine_tests {
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn multithreaded_deposits_ok() {
+        let engine = Engine::new(EchoDbStorage::new());
+        let mut handles = vec![];
+
+        // launch 100 concurrent deposit operations (each deposits $3)
+        for i in 0..100 {
+            let engine = engine.clone();
+            let handle = tokio::spawn(async move {
+                let max_retries = 100;
+                for _ in 0..max_retries {
+                    if engine.deposit(1, i, Decimal4::from(3)).await.is_ok() {
+                        return Ok(());
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+                Err(EngineError::ConcurrentOperationDetected)
+            });
+            handles.push(handle);
+        }
+
+        // wait for all deposit operations to complete
+        for handle in handles {
+            assert_eq!(handle.await.unwrap(), Ok(()));
+        }
+
+        // check the final account state
+        let acc = engine.get_account(1).await.unwrap().unwrap();
+        assert_eq!(acc.available(), Decimal4::from(300));
     }
 }
