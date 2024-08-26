@@ -23,8 +23,8 @@ pub trait Storage {
     async fn insert_operation(&self, db_tx: &mut Self::DbTx, op: u64) -> Result<(), DbError>;
 
     // methods for consistency
-    async fn start_db_tx(&mut self) -> Result<Self::DbTx, DbError>;
-    async fn commit_db_tx(&mut self, db_tx: Self::DbTx) -> Result<(), DbError>;
+    async fn start_db_tx(&self) -> Result<Self::DbTx, DbError>;
+    async fn commit_db_tx(&self, db_tx: Self::DbTx) -> Result<(), DbError>;
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -149,12 +149,12 @@ impl Storage for EchoDbStorage {
         Ok(())
     }
 
-    async fn start_db_tx(&mut self) -> Result<Self::DbTx, DbError> {
+    async fn start_db_tx(&self) -> Result<Self::DbTx, DbError> {
         let db_tx = self.db.begin(true).await?;
         Ok(db_tx)
     }
 
-    async fn commit_db_tx(&mut self, mut db_tx: Self::DbTx) -> Result<(), DbError> {
+    async fn commit_db_tx(&self, mut db_tx: Self::DbTx) -> Result<(), DbError> {
         db_tx.commit()?;
         Ok(())
     }

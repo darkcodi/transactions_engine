@@ -51,7 +51,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
     }
 
-    pub async fn execute_operation(&mut self, operation: Operation) -> Result<(), EngineError> {
+    pub async fn execute_operation(&self, operation: Operation) -> Result<(), EngineError> {
         match operation {
             Operation::Deposit { acc_id, tx_id, amount } => self.deposit(acc_id, tx_id, amount).await,
             Operation::Withdraw { acc_id, tx_id, amount } => self.withdraw(acc_id, tx_id, amount).await,
@@ -61,21 +61,21 @@ impl<TStorage: Storage> Engine<TStorage> {
         }
     }
 
-    pub async fn get_account(&mut self, acc_id: u16) -> Result<Option<Account>, EngineError> {
+    pub async fn get_account(&self, acc_id: u16) -> Result<Option<Account>, EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
         let account = self.storage.get_account(&mut db_tx, acc_id).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(account)
     }
 
-    pub async fn get_all_accounts(&mut self) -> Result<Vec<Account>, EngineError> {
+    pub async fn get_all_accounts(&self) -> Result<Vec<Account>, EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
         let accounts = self.storage.get_all_accounts(&mut db_tx).await?;
         self.storage.commit_db_tx(db_tx).await?;
         Ok(accounts)
     }
 
-    pub async fn deposit(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+    pub async fn deposit(&self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         if !amount.is_positive() {
             return Err(EngineError::AmountIsNotPositive);
         }
@@ -114,7 +114,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn withdraw(&mut self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
+    pub async fn withdraw(&self, acc_id: u16, tx_id: u32, amount: Decimal4) -> Result<(), EngineError> {
         if !amount.is_positive() {
             return Err(EngineError::AmountIsNotPositive);
         }
@@ -147,7 +147,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn dispute(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn dispute(&self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
@@ -171,7 +171,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn resolve(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn resolve(&self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
@@ -195,7 +195,7 @@ impl<TStorage: Storage> Engine<TStorage> {
         Ok(())
     }
 
-    pub async fn chargeback(&mut self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
+    pub async fn chargeback(&self, acc_id: u16, tx_id: u32) -> Result<(), EngineError> {
         let mut db_tx = self.storage.start_db_tx().await?;
 
         let maybe_tx = self.storage.get_tx(&mut db_tx, tx_id).await?;
@@ -299,7 +299,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn deposit_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.deposit(1, 2, Decimal4::from(200)).await, Ok(()));
         assert_eq!(engine.deposit(2, 3, Decimal4::from(300)).await, Ok(()));
@@ -307,21 +307,21 @@ mod engine_tests {
 
     #[tokio::test]
     async fn withdraw_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.withdraw(1, 2, Decimal4::from(50)).await, Ok(()));
     }
 
     #[tokio::test]
     async fn dispute_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
     }
 
     #[tokio::test]
     async fn resolve_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
@@ -329,7 +329,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn chargeback_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
@@ -337,7 +337,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn deposit_idempotency() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         let mut db_tx = engine.storage.start_db_tx().await.unwrap();
@@ -347,7 +347,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn withdraw_idempotency() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.withdraw(1, 2, Decimal4::from(50)).await, Ok(()));
         assert_eq!(engine.withdraw(1, 2, Decimal4::from(50)).await, Ok(()));
@@ -358,7 +358,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn dispute_no_idempotency() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Disputed, to: TransactionState::Disputed }));
@@ -370,7 +370,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn resolve_no_idempotency() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
@@ -383,7 +383,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn chargeback_no_idempotency() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
@@ -397,14 +397,14 @@ mod engine_tests {
 
     #[tokio::test]
     async fn withdraw_insufficient_funds_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.withdraw(1, 2, Decimal4::from(200)).await, Err(EngineError::InsufficientFunds));
     }
 
     #[tokio::test]
     async fn deposit_on_locked_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
@@ -413,7 +413,7 @@ mod engine_tests {
 
     #[tokio::test]
     async fn withdraw_on_locked_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
@@ -422,76 +422,76 @@ mod engine_tests {
 
     #[tokio::test]
     async fn deposit_on_nonexistent_account_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
     }
 
     #[tokio::test]
     async fn withdraw_on_nonexistent_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.withdraw(1, 1, Decimal4::from(100)).await, Err(EngineError::AccountNotFound));
     }
 
     #[tokio::test]
     async fn dispute_on_nonexistent_tx_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.dispute(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn resolve_on_nonexistent_tx_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.resolve(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn chargeback_on_nonexistent_tx_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.chargeback(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn dispute_on_nonexistent_transaction_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.dispute(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn resolve_on_nonexistent_transaction_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.resolve(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn chargeback_on_nonexistent_transaction_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.chargeback(1, 1).await, Err(EngineError::TransactionNotFound));
     }
 
     #[tokio::test]
     async fn dispute_on_transaction_bound_to_another_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(2, 1).await, Err(EngineError::TransactionIsBoundToAnotherAccount(1)));
     }
 
     #[tokio::test]
     async fn resolve_on_transaction_bound_to_another_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.resolve(2, 1).await, Err(EngineError::TransactionIsBoundToAnotherAccount(1)));
     }
 
     #[tokio::test]
     async fn chargeback_on_transaction_bound_to_another_account_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.chargeback(2, 1).await, Err(EngineError::TransactionIsBoundToAnotherAccount(1)));
     }
 
     #[tokio::test]
     async fn resolve_after_chargeback_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Ok(()));
@@ -500,21 +500,21 @@ mod engine_tests {
 
     #[tokio::test]
     async fn resolve_after_posted_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Posted }));
     }
 
     #[tokio::test]
     async fn chargeback_after_posted_err() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.chargeback(1, 1).await, Err(EngineError::ForbiddenTxStateTransition { from: TransactionState::Posted, to: TransactionState::Chargeback }));
     }
 
     #[tokio::test]
     async fn chargeback_after_resolve_and_second_dispute_ok() {
-        let mut engine = Engine::new(EchoDbStorage::new());
+        let engine = Engine::new(EchoDbStorage::new());
         assert_eq!(engine.deposit(1, 1, Decimal4::from(100)).await, Ok(()));
         assert_eq!(engine.dispute(1, 1).await, Ok(()));
         assert_eq!(engine.resolve(1, 1).await, Ok(()));
