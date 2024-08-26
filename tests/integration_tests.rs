@@ -13,8 +13,8 @@ struct TransactionsEngineWorld {
     tx_counter: u32,
     given_acc: Account,
     last_result: Result<(), EngineError>,
-    last_deposit_tx: u32,
-    last_disputed_tx: u32,
+    last_deposit_tx: Option<u32>,
+    last_disputed_tx: Option<u32>,
     csv_operations: Vec<CsvOperation>,
 }
 
@@ -25,8 +25,8 @@ impl TransactionsEngineWorld {
             tx_counter: 0,
             given_acc: Account::default(),
             last_result: Ok(()),
-            last_deposit_tx: 0,
-            last_disputed_tx: 0,
+            last_deposit_tx: None,
+            last_disputed_tx: None,
             csv_operations: Vec::new(),
         }
     }
@@ -71,7 +71,7 @@ async fn given_csv_file(world: &mut TransactionsEngineWorld, step: &Step) -> any
 #[when(expr = "the user deposits ${float}")]
 async fn user_deposits(world: &mut TransactionsEngineWorld, amount: f32) -> anyhow::Result<()> {
     world.last_result = world.engine.deposit(1, world.tx_counter, amount.try_into()?).await;
-    world.last_deposit_tx = world.tx_counter;
+    world.last_deposit_tx = Some(world.tx_counter);
     world.tx_counter += 1;
     Ok(())
 }
@@ -86,26 +86,26 @@ async fn user_withdraws(world: &mut TransactionsEngineWorld, amount: f32) -> any
 #[when("the user disputes the last transaction")]
 async fn user_disputes_last_tx(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
     world.last_result = world.engine.dispute(1, world.tx_counter - 1).await;
-    world.last_disputed_tx = world.tx_counter - 1;
+    world.last_disputed_tx = Some(world.tx_counter - 1);
     Ok(())
 }
 
 #[when("the user disputes the last deposit transaction")]
 async fn user_disputes_last_deposit(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
-    world.last_result = world.engine.dispute(1, world.last_deposit_tx).await;
+    world.last_result = world.engine.dispute(1, world.last_deposit_tx.ok_or(anyhow::anyhow!("No deposit transaction found"))?).await;
     world.last_disputed_tx = world.last_deposit_tx;
     Ok(())
 }
 
 #[when("the the last disputed tx is resolved")]
 async fn last_disputed_tx_is_resolved(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
-    world.last_result = world.engine.resolve(1, world.last_disputed_tx).await;
+    world.last_result = world.engine.resolve(1, world.last_disputed_tx.ok_or(anyhow::anyhow!("No disputed transaction found"))?).await;
     Ok(())
 }
 
 #[when("the the last disputed tx is charged back")]
 async fn last_disputed_tx_is_charged_back(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
-    world.last_result = world.engine.chargeback(1, world.last_disputed_tx).await;
+    world.last_result = world.engine.chargeback(1, world.last_disputed_tx.ok_or(anyhow::anyhow!("No disputed transaction found"))?).await;
     Ok(())
 }
 
