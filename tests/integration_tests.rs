@@ -1,5 +1,7 @@
 use cucumber::{given, then, when, World};
+use cucumber::gherkin::Step;
 use transactions_engine::account::Account;
+use transactions_engine::csv_parser::CsvOperation;
 use transactions_engine::decimal::Decimal4;
 use transactions_engine::engine::{Engine, EngineError};
 use transactions_engine::storage::EchoDbStorage;
@@ -13,6 +15,7 @@ struct TransactionsEngineWorld {
     last_result: Result<(), EngineError>,
     last_deposit_tx: u32,
     last_disputed_tx: u32,
+    csv_operations: Vec<CsvOperation>,
 }
 
 impl TransactionsEngineWorld {
@@ -24,6 +27,7 @@ impl TransactionsEngineWorld {
             last_result: Ok(()),
             last_deposit_tx: 0,
             last_disputed_tx: 0,
+            csv_operations: Vec::new(),
         }
     }
 }
@@ -48,6 +52,19 @@ async fn given_locked_acc_with_amount(world: &mut TransactionsEngineWorld, amoun
     user_deposits(world, 1.0).await?;
     user_disputes_last_deposit(world).await?;
     last_disputed_tx_is_charged_back(world).await?;
+    Ok(())
+}
+
+#[given("the CSV file with the following content:")]
+async fn given_csv_file(world: &mut TransactionsEngineWorld, step: &Step) -> anyhow::Result<()> {
+    let csv_content = step.docstring().unwrap();
+    let mut rdr = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All).from_reader(csv_content.as_bytes());
+    for result in rdr.deserialize() {
+        let record: CsvOperation = result?;
+        world.csv_operations.push(record);
+    }
+
     Ok(())
 }
 
@@ -89,6 +106,16 @@ async fn last_disputed_tx_is_resolved(world: &mut TransactionsEngineWorld) -> an
 #[when("the the last disputed tx is charged back")]
 async fn last_disputed_tx_is_charged_back(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
     world.last_result = world.engine.chargeback(1, world.last_disputed_tx).await;
+    Ok(())
+}
+
+#[when("the CSV operations are performed")]
+async fn csv_operations_are_performed(world: &mut TransactionsEngineWorld) -> anyhow::Result<()> {
+    for csv_op in world.csv_operations.iter() {
+        let op = csv_op.clone().try_into()?;
+        world.last_result = world.engine.execute_operation(op).await;
+    }
+
     Ok(())
 }
 
@@ -157,6 +184,29 @@ async fn user_account_locked(world: &mut TransactionsEngineWorld) -> anyhow::Res
     Ok(())
 }
 
+#[then("the accounts should be as follows:")]
+async fn accounts_should_be(world: &mut TransactionsEngineWorld, step: &Step) -> anyhow::Result<()> {
+    if step.table.is_none() {
+        return Err(anyhow::anyhow!("Table not found"));
+    }
+
+    let table = step.table.as_ref().unwrap();
+    for row in table.rows.iter().skip(1) { // NOTE: skip header
+        let id: u16 = row[0].parse()?;
+        let available: Decimal4 = row[1].parse()?;
+        let held: Decimal4 = row[2].parse()?;
+        let total: Decimal4 = row[3].parse()?;
+        let locked: bool = row[4].parse()?;
+        let acc = world.engine.get_account(id).await?.ok_or(anyhow::anyhow!("Account not found"))?;
+        assert_eq!(acc.available(), available);
+        assert_eq!(acc.held(), held);
+        assert_eq!(acc.total(), total);
+        assert_eq!(acc.locked(), locked);
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     TransactionsEngineWorld::run("tests/features/deposit.feature").await;
@@ -165,4 +215,5 @@ async fn main() {
     TransactionsEngineWorld::run("tests/features/resolve.feature").await;
     TransactionsEngineWorld::run("tests/features/chargeback.feature").await;
     TransactionsEngineWorld::run("tests/features/lock_account.feature").await;
+    TransactionsEngineWorld::run("tests/features/csv_input.feature").await;
 }
