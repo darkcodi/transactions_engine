@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+
 use thiserror::Error;
+
 use crate::account::{Account, AccountUpdateError};
 use crate::decimal::Decimal4;
 use crate::storage::{DbError, Storage};
@@ -315,8 +317,9 @@ impl From<TxUpdateError> for EngineError {
 
 #[cfg(test)]
 mod engine_tests {
-    use super::*;
     use crate::storage::EchoDbStorage;
+
+    use super::*;
 
     #[tokio::test]
     async fn deposit_ok() {

@@ -2,6 +2,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::str::FromStr;
+
 use rust_decimal::{Decimal, RoundingStrategy};
 use rust_decimal::prelude::{FromPrimitive, Zero};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

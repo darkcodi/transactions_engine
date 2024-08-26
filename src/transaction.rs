@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
 use crate::decimal::Decimal4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
